@@ -49,7 +49,7 @@ async def initialize_from_json(bot: commands.Bot, settings_class: JsonSerializab
     by reading the JSON file and deserializing the objects."""
     for guild in bot.guilds:
         if read_json(guild.id, key) is None:
-            write_json(guild.id, key, value={})
+            continue
         try:
             if is_list:
                 guild_settings[guild] = {await settings_class.from_json(bot, json_str) for json_str in read_json(guild.id, key)}
