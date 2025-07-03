@@ -5,7 +5,7 @@ import math
 
 from discord import app_commands
 from discord.ext import commands
-from ioutils import write_json, initialize_from_json
+from ioutils import ColorEmbed, write_json, initialize_from_json
 from structs import Player, Ladder
 
 
@@ -37,7 +37,7 @@ class LadderRankingView(discord.ui.View):
         players_ranking = islice(enumerate(self.ladder.players), self.page * self.PLAYERS_PER_PAGE, self.page * self.PLAYERS_PER_PAGE + self.PLAYERS_PER_PAGE)
         description  = '\n'.join([f"**{i+1}.** {player.user.mention}{"" if player.is_active() else " (INACTIVE)"}" for i, player in players_ranking])
         description += f"\n\nPage {self.page + 1}/{self.max_page() + 1}"
-        embed = discord.Embed(title=f"Rankings: {self.ladder.guild.name}", description=description)
+        embed = ColorEmbed(title=f"Rankings: {self.ladder.guild.name}", description=description)
         await self.message.edit(embed=embed)
 
     def max_page(self) -> int:
@@ -66,7 +66,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         self.ladders[interaction.guild] = ladder
         write_json(interaction.guild.id, "ladder", value=ladder.to_json())
 
-        embed = discord.Embed(title="Ladder Created!", description="Use the `/ladder join` command to join this server's ladder!")
+        embed = ColorEmbed(title="Ladder Created!", description="Use the `/ladder join` command to join this server's ladder!")
         return await interaction.response.send_message(embed=embed)
     
     @app_commands.command()
@@ -82,7 +82,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
     
         description = f"**{interaction.user.mention} has joined this server's ladder!**\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
-        embed =  discord.Embed(title="New Player!", description=description)
+        embed =  ColorEmbed(title="New Player!", description=description)
         return await interaction.response.send_message(embed=embed)
     
     @app_commands.command()
@@ -98,7 +98,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
     
         description = f"**{interaction.user.mention} has left this server's ladder!**\n\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
-        embed =  discord.Embed(title="Player Left!", description=description)
+        embed = ColorEmbed(title="Player Left!", description=description)
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
@@ -108,10 +108,10 @@ class LadderCog(commands.GroupCog, name="ladder"):
             return
         
         if len(self.ladders[interaction.guild].players) == 0:
-            embed = discord.Embed(title=f"Rankings: {interaction.guild.name}", description="This server's ladder is empty.\nUse the `/ladder join` command!")
+            embed = ColorEmbed(title=f"Rankings: {interaction.guild.name}", description="This server's ladder is empty.\nUse the `/ladder join` command!")
             return await interaction.response.send_message(embed=embed)
         
-        embed = discord.Embed(title="Thinking...")
+        embed = ColorEmbed(title="Thinking...")
         callback = await interaction.response.send_message(embed=embed) # We need an initial message in order to just edit it with update_view() later
 
         message = await interaction.channel.fetch_message(callback.message_id)

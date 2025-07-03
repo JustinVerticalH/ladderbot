@@ -1,7 +1,6 @@
-import json, os
+import json
+import os
 from abc import ABC, abstractmethod
-from typing import Iterable
-from discord import Embed, Color
 import discord
 from discord.ext import commands
 
@@ -17,6 +16,10 @@ class JsonSerializable(ABC):
     @abstractmethod
     def from_json(bot: commands.Bot, json_obj: dict):
         pass
+
+class ColorEmbed(discord.Embed):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, color=discord.Color.from_str("#03fcdb"), **kwargs)
 
 def read_json(*path: list[str | int]):
     """Read JSON object data from a file."""
