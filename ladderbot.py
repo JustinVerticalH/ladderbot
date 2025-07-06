@@ -5,6 +5,7 @@ import discord
 from discord.ext import commands
 
 from ladder import LadderCog
+from challenge import ChallengeCog
 
 def main():
     token = os.getenv("TOKEN")
@@ -15,6 +16,7 @@ def main():
     bot = commands.Bot(command_prefix=command_prefix, activity=activity, intents=intents, enable_debug_events=True)
 
     asyncio.run(bot.add_cog(LadderCog(bot)))
+    asyncio.run(bot.add_cog(ChallengeCog(bot)))
 
     bot.run(token)
 

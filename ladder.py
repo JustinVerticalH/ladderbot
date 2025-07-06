@@ -30,6 +30,10 @@ class LadderCog(commands.GroupCog, name="ladder"):
         self.ladders[interaction.guild] = ladder
         write_json(interaction.guild.id, "ladder", value=ladder.to_json())
 
+        challenges = self.bot.get_cog("challenge").challenges
+        challenges[interaction.guild] = {}
+        write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in challenges[interaction.guild]])
+
         embed = ColorEmbed(title="Ladder Created!", description="Use the `/ladder join` command to join this server's ladder!")
         return await interaction.response.send_message(embed=embed)
     
@@ -60,8 +64,15 @@ class LadderCog(commands.GroupCog, name="ladder"):
             return await interaction.response.send_message("You are not in this server's ladder.", ephemeral=True)
         self.ladders[interaction.guild].players.remove(player)
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
+
+        challenges = self.bot.get_cog("challenge").challenges[interaction.guild]
+        active_challenges = {challenge for challenge in challenges if challenge.completed_at is not None and (challenge.challenger_player.user == interaction.user or challenge.challenged_player.user == interaction.user)}
+        challenges -= active_challenges
+        self.bot.get_cog("challenge").challenges[interaction.guild] = challenges
+        write_json(interaction.guild, "challenges", value=[challenge.to_json() for challenge in challenges])
+    
         description = f"**{interaction.user.mention} has left this server's ladder!**\n\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
-        embed = ColorEmbed(title="Player Left!", description=description)
+        embed = ColorEmbed(title="Player left!", description=description)
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
