@@ -1,47 +1,11 @@
 import datetime
-from itertools import islice
 import discord
-import math
 
 from discord import app_commands
 from discord.ext import commands
 from ioutils import ColorEmbed, write_json, initialize_from_json
-from structs import Player, Ladder
+from structs import PagedView, Player, Ladder
 
-
-class LadderRankingView(discord.ui.View):
-
-    def __init__(self, ladder: Ladder, message: discord.Message):
-        super().__init__(timeout=None)
-        self.page: int = 0
-        self.ladder: Ladder = ladder
-        self.message: discord.Message = message
-        self.PLAYERS_PER_PAGE: int = 10
-
-    @discord.ui.button(emoji="⏪", style=discord.ButtonStyle.blurple, custom_id="back_button")
-    async def back_page_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.page > 0: # Lower bound
-            self.page -= 1
-            await self.update_view()
-        return await interaction.response.defer()
-
-
-    @discord.ui.button(emoji="⏩", style=discord.ButtonStyle.blurple, custom_id="forward_button")
-    async def forward_page_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if self.page < self.max_page(): # Upper bound
-            self.page += 1
-            await self.update_view()
-        return await interaction.response.defer()
-
-    async def update_view(self):
-        players_ranking = islice(enumerate(self.ladder.players), self.page * self.PLAYERS_PER_PAGE, self.page * self.PLAYERS_PER_PAGE + self.PLAYERS_PER_PAGE)
-        description  = '\n'.join([f"**{i+1}.** {player.user.mention}{"" if player.is_active() else " (INACTIVE)"}" for i, player in players_ranking])
-        description += f"\n\nPage {self.page + 1}/{self.max_page() + 1}"
-        embed = ColorEmbed(title=f"Rankings: {self.ladder.guild.name}", description=description)
-        await self.message.edit(embed=embed)
-
-    def max_page(self) -> int:
-        return math.ceil(len(self.ladder.players) / self.PLAYERS_PER_PAGE) - 1
 
 @app_commands.guild_only()
 class LadderCog(commands.GroupCog, name="ladder"):
@@ -96,13 +60,12 @@ class LadderCog(commands.GroupCog, name="ladder"):
             return await interaction.response.send_message("You are not in this server's ladder.", ephemeral=True)
         self.ladders[interaction.guild].players.remove(player)
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
-    
         description = f"**{interaction.user.mention} has left this server's ladder!**\n\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
         embed = ColorEmbed(title="Player Left!", description=description)
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
-    async def rankings(self, interaction: discord.Interaction):
+    async def rankings(self, interaction: discord.Interaction, ephemeral: bool = True):
         """List the current standings of this server's ladder."""
         if not await self.verify_ladder_exists(interaction):
             return
@@ -111,14 +74,9 @@ class LadderCog(commands.GroupCog, name="ladder"):
             embed = ColorEmbed(title=f"Rankings: {interaction.guild.name}", description="This server's ladder is empty.\nUse the `/ladder join` command!")
             return await interaction.response.send_message(embed=embed)
         
-        embed = ColorEmbed(title="Thinking...")
-        callback = await interaction.response.send_message(embed=embed) # We need an initial message in order to just edit it with update_view() later
-
-        message = await interaction.channel.fetch_message(callback.message_id)
-        view = LadderRankingView(self.ladders[interaction.guild], message)
-        self.bot.add_view(view=view, message_id=callback.message_id)
-        await view.update_view()
-        await message.edit(view=view)
+        ladder = self.ladders[interaction.guild]
+        view = PagedView[Player](self.bot, f"Rankings: {ladder.guild.name}", ladder.players, lambda p: f"{p.user.mention}{"" if p.is_active() else " (INACTIVE)"}")
+        await view.send(interaction, ephemeral=ephemeral)
 
     async def verify_ladder_exists(self, interaction: discord.Interaction) -> bool:
         """Checks if a ladder exists for this interaction's guild, and if not, sends a warning message."""

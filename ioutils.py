@@ -47,16 +47,16 @@ def write_json(*path: any, value: any):
         json.dump(file_json, file, indent=2)
         file.truncate()
 
-async def initialize_from_json(bot: commands.Bot, settings_class: JsonSerializable, guild_settings: dict[discord.Guild, list[JsonSerializable]], key: str, is_list: bool = True):
+async def initialize_from_json(bot: commands.Bot, settings_class: JsonSerializable, guild_settings: dict[discord.Guild, JsonSerializable | list[JsonSerializable]], key: str, is_list: bool = True):
     """Initializes a dictionary mapping guild ID to a set of JSON-serializable objects 
     by reading the JSON file and deserializing the objects."""
     for guild in bot.guilds:
         if read_json(guild.id, key) is None:
-            continue
+            write_json(guild.id, key, value={})
         try:
             if is_list:
                 guild_settings[guild] = {await settings_class.from_json(bot, json_str) for json_str in read_json(guild.id, key)}
             else:
-                guild_settings[guild] = await settings_class.from_json(bot, read_json(guild.id, key))
-        except (TypeError, AttributeError, json.JSONDecodeError) as e:
+                guild_settings[guild] = None if read_json(guild.id, key) == {} else await settings_class.from_json(bot, read_json(guild.id, key))
+        except (AttributeError, json.JSONDecodeError) as e:
             print(e)
