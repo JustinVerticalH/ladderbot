@@ -86,17 +86,28 @@ class Ladder(JsonSerializable):
     def __eq__(self, other):
         return self.guild.id == other.guild.id
 
-    def is_challengeable(self, challenger: Player, challenged: Player) -> bool:
-        """Whether or not one player can challenge another player. This is based on each player's position on the ladder:\n
+    def challengeable_players(self, challenger: Player) -> list[Player]:
+        """All players that can be challenged by a player. This is based on each player's position on the ladder:\n
         2-4: can challenge 1 above\n
         5-8: can challenge 2 above\n
         9-16: can challenge 3 above\n
-        17+: can challenge 4 above, etc."""
-        if self.players.index(challenger) < self.players.index(challenged): # You can't challenge someone who's already below you
-            return False
-        if self.players.index(challenger) == 1 and self.players.index(challenged) == 0:
-            return True
-        return math.ceil(math.log2(self.players.index(challenger) + sys.float_info.min))
+        17+: can challenge 4 above, etc.\n
+        Inactive players are skipped over, but still included in the final list, i.e. 2-4 can challenge any players up to the next active player."""
+        number_of_challengeable_players = math.ceil(math.log2(self.players.index(challenger) + 0.0001))
+        number_of_active_players_found = 0
+        players = []
+        challenger_index = self.players.index(challenger)
+        for i in range(number_of_challengeable_players):
+            try:
+                player = self.players[challenger_index-i-1]
+            except IndexError:
+                break
+            if player.is_active():
+                number_of_active_players_found += 1
+            players.append(player)
+            if number_of_active_players_found == number_of_challengeable_players:
+                break
+        return players
 
     def to_json(self) -> dict[str, list[int]]:
         """Convert the current ladder object to a JSON string."""

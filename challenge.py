@@ -15,7 +15,7 @@ class ChallengeSendSelect(discord.ui.Select):
         self.player: Player = player
         self.ladder: Ladder = ladder
 
-        options = [discord.SelectOption(label=other_player.user.name) for other_player in ladder.players if self.ladder.is_challengeable(player, other_player)]
+        options = [discord.SelectOption(label=other_player.user.name) for other_player in ladder.challengeable_players(player)]
         super().__init__(placeholder="Select player to challenge", options=options)
     
     async def callback(self, interaction: discord.Interaction):
@@ -98,7 +98,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
         ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
         challenger_player = next((player for player in ladder.players if player.user == interaction.user), None)
-        challengeable_players = [player for player in ladder.players if ladder.is_challengeable(challenger_player, player)]
+        challengeable_players = ladder.challengeable_players(challenger_player)
         if len(challengeable_players) == 0:
             return await interaction.response.send_message("There are no users for you to challenge!", ephemeral=True)
 
