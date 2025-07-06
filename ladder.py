@@ -91,7 +91,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
 
     async def verify_ladder_exists(self, interaction: discord.Interaction) -> bool:
         """Checks if a ladder exists for this interaction's guild, and if not, sends a warning message."""
-        if interaction.guild not in self.ladders:
+        if self.ladders[interaction.guild] is None:
             await interaction.response.send_message("This server does not have a ladder yet. Use the `/ladder create` command!", ephemeral=True)
             return False
         return True
