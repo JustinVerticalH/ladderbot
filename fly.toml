@@ -1,0 +1,6 @@
+app = 'verticalh-ladderbot'
+primary_region = 'iad'
+
+[mounts]
+source = "ladderbot_files"
+destination = "/docker/data"
