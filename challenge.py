@@ -1,3 +1,4 @@
+import asyncio
 import datetime
 import discord
 import re
@@ -8,6 +9,8 @@ from discord.utils import format_dt
 from ioutils import ColorEmbed, write_json, initialize_from_json
 from structs import PagedView, Player, Challenge, Ladder
 
+
+HOURS_UNTIL_AUTO_VERIFY = 12
 
 class ChallengeSendSelect(discord.ui.Select):
     def __init__(self, interaction: discord.Interaction, player: Player, ladder: Ladder):
@@ -40,36 +43,7 @@ class ChallengeVerifyButton(discord.ui.Button):
 
     async def callback(self, interaction: discord.Interaction):
         """The callback associated with this UI item."""
-        self.challenge.completed_at = datetime.datetime.now()
-        scores = [int(s) for s in re.compile("(\d)-(\d)").match(self.score).groups()]
-        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
-        lower_position = ladder.players.index(self.challenge.challenger_player)
-        higher_position = ladder.players.index(self.challenge.challenged_player)
-        if self.winner == self.challenge.challenger_player.user:
-            # Swap the players' positions
-            temp = self.challenge.challenger_player
-            ladder.players[lower_position] = self.challenge.challenged_player
-            ladder.players[higher_position] = temp
-            self.bot.get_cog("ladder").ladders[interaction.guild] = ladder
-            write_json(interaction.guild.id, "ladder", value=ladder.to_json())
-
-            self.challenge.challenger_player_score = max(scores)
-            self.challenge.challenged_player_score = min(scores)
-
-            description=f"{self.challenge.challenger_player.user.mention} has defeated {self.challenge.challenged_player.user.mention}!\nThey have climbed from {ordinal(lower_position+1)} to {ordinal(higher_position+1)}."
-            embed = ColorEmbed(title="Winner!", description=description)
-        else:
-            self.challenge.challenger_player_score = min(scores)
-            self.challenge.challenged_player_score = max(scores)
-
-            description=f"{self.challenge.challenged_player.user.mention} has defended their spot against {self.challenge.challenger_player.user.mention}!\nThey remain at {ordinal(higher_position+1)}."
-            embed = ColorEmbed(title="Winner!", description=description)
-
-        self.challenge.challenger_player.last_active_date = datetime.datetime.now()
-        self.challenge.challenged_player.last_active_date = datetime.datetime.now()
-        write_json(interaction.guild.id, "players", value=[player.to_json() for player in ladder.players])
-        await interaction.response.edit_message(embed=embed, view=None)
-        write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in self.bot.get_cog("challenge").challenges[interaction.guild]])
+        await self.bot.get_cog("challenge").complete_challenge(interaction, self.challenge, self.winner, self.score, self.message)
 
 @app_commands.guild_only()
 class ChallengeCog(commands.GroupCog, name="challenge"):
@@ -121,12 +95,18 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         if challenge is None:
             return await interaction.response.send_message("Could not find a challenge for that user!", ephemeral=True)
         
-        description=f"{interaction.user.mention} has reported: {winner.mention} {score} {interaction.user.mention if versus == winner else versus.mention}.\nClick the button below to confirm."
+        confirmation_time = datetime.datetime.now() + datetime.timedelta(hours=HOURS_UNTIL_AUTO_VERIFY)
+        description= \
+            f"{interaction.user.mention} has reported: {winner.mention} {score} {interaction.user.mention if versus == winner else versus.mention}.\n \
+            Click the button below to confirm, or run this command again to report a different score.\n \
+            This challenge will automatically confirm {format_dt(confirmation_time, style='R')}.\n"
         embed = ColorEmbed(title="Winner!", description=description)
         response = await interaction.response.send_message(embed=embed)
         message = await interaction.channel.fetch_message(response.message_id)
         view = discord.ui.View().add_item(ChallengeVerifyButton(self.bot, challenge, versus, winner, score, message))
         await message.edit(embed=embed, view=view)
+        await asyncio.sleep(HOURS_UNTIL_AUTO_VERIFY * 60 * 60) # If this report has not been verified by the other user after X hours, auto-verify
+        await self.complete_challenge(interaction, challenge, winner, score, message)
 
     @app_commands.command()
     async def list(self, interaction: discord.Interaction, ephemeral: bool = True):
@@ -148,7 +128,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     async def history(self, interaction: discord.Interaction, ephemeral: bool = True):
         """View your past challenges."""
         if not await self.verify_user_in_ladder(interaction):
-            return        
+            return
         past_challenges = [challenge for challenge in self.challenges[interaction.guild] if (challenge.challenger_player.user == interaction.user or challenge.challenged_player.user == interaction.user) and challenge.completed_at is not None]
         past_challenges.sort(key=lambda challenge: challenge.completed_at, reverse=True)
         challenge_to_str = lambda challenge: f"{challenge.challenger_player.user.mention} {challenge.challenger_player_score}-{challenge.challenged_player_score} {challenge.challenged_player.user.mention} - {format_dt(challenge.completed_at, style='R')}"
@@ -171,6 +151,42 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         write_json(interaction.guild.id, "players", value=[player.to_json() for player in self.bot.get_cog("ladder").ladders[interaction.guild].players])
         embed = ColorEmbed(title="Challenge!", description=f"You have been challenged by {challenger_player.user.mention}!")
         await interaction.response.send_message(challenged_player.user.mention, embed=embed)
+
+    async def complete_challenge(self, interaction: discord.Interaction, challenge: Challenge, winner: discord.Member, score: str, message: discord.Message):
+        """Update a challenge's status and edit the confirmation message."""
+        if challenge.completed_at is not None:
+            embed = ColorEmbed(title="Winner!", description="This challenge has already been reported!")
+            return await message.edit(embed=embed, view=None)
+        challenge.completed_at = datetime.datetime.now()
+        scores = [int(s) for s in re.compile("(\d)-(\d)").match(score).groups()]
+        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
+        lower_position = ladder.players.index(challenge.challenger_player)
+        higher_position = ladder.players.index(challenge.challenged_player)
+        if winner == challenge.challenger_player.user:
+            # Swap the players' positions
+            temp = challenge.challenger_player
+            ladder.players[lower_position] = challenge.challenged_player
+            ladder.players[higher_position] = temp
+            self.bot.get_cog("ladder").ladders[interaction.guild] = ladder
+            write_json(interaction.guild.id, "ladder", value=ladder.to_json())
+
+            challenge.challenger_player_score = max(scores)
+            challenge.challenged_player_score = min(scores)
+
+            description=f"{challenge.challenger_player.user.mention} has defeated {challenge.challenged_player.user.mention}!\nThey have climbed from {ordinal(lower_position+1)} to {ordinal(higher_position+1)}."
+            embed = ColorEmbed(title="Winner!", description=description)
+        else:
+            challenge.challenger_player_score = min(scores)
+            challenge.challenged_player_score = max(scores)
+
+            description=f"{challenge.challenged_player.user.mention} has defended their spot against {challenge.challenger_player.user.mention}!\nThey remain at {ordinal(higher_position+1)}."
+            embed = ColorEmbed(title="Winner!", description=description)
+
+        challenge.challenger_player.last_active_date = datetime.datetime.now()
+        challenge.challenged_player.last_active_date = datetime.datetime.now()
+        write_json(interaction.guild.id, "players", value=[player.to_json() for player in ladder.players])
+        await message.edit(embed=embed, view=None)
+        write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in self.challenges[interaction.guild]])
 
     async def verify_user_in_ladder(self, interaction: discord.Interaction) -> bool:
         """Checks if a user has joined this guild's ladder, and if not, sends a warning message."""
