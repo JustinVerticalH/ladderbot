@@ -1,14 +1,19 @@
-from dataclasses import dataclass, field
 import datetime
-from itertools import islice
-import math
-import sys
-from typing import Callable
-from ioutils import ColorEmbed, JsonSerializable
-
 import discord
-from discord.ext import commands
+import math
 
+from dataclasses import dataclass, field
+from discord.ext import commands
+from enum import Enum
+from itertools import islice
+from ioutils import ColorEmbed, JsonSerializable
+from typing import Callable
+
+
+class Videogame(Enum):
+    """The videogame that the players in the ladder play."""
+    SSBM = "Super Smash Bros. Melee"
+    RoA = "Rivals of Aether"
 
 @dataclass(order=True)
 class Player(JsonSerializable):
@@ -43,9 +48,6 @@ class Challenge:
     challenger_player: Player = field()
     challenged_player: Player = field()
     issued_at: datetime.datetime = field()
-    completed_at: datetime.datetime | None = field(default=None, compare=False, hash=False)
-    challenger_player_score: int | None = field(default=None, compare=False, hash=False)
-    challenged_player_score: int | None = field(default=None, compare=False, hash=False)
 
     def __hash__(self):
         return hash((self.challenger_player.user.id, self.challenged_player.user.id, self.issued_at))
@@ -55,10 +57,7 @@ class Challenge:
         return {
             "challenger_player": self.challenger_player.to_json(),
             "challenged_player": self.challenged_player.to_json(),
-            "issued_at": self.issued_at.timestamp(),
-            "completed_at": self.completed_at.timestamp() if self.completed_at is not None else -1,
-            "challenger_player_score": self.challenger_player_score if self.challenger_player_score is not None else -1,
-            "challenged_player_score": self.challenged_player_score if self.challenged_player_score is not None else -1
+            "issued_at": self.issued_at.timestamp()
         }
 
     @staticmethod
@@ -67,11 +66,8 @@ class Challenge:
         challenger_player = await Player.from_json(bot, json_obj["challenger_player"])
         challenged_player = await Player.from_json(bot, json_obj["challenged_player"])
         issued_at = datetime.datetime.fromtimestamp(json_obj["issued_at"])
-        completed_at = datetime.datetime.fromtimestamp(json_obj["completed_at"]) if json_obj["completed_at"] >= 0 else None
-        challenger_player_score = json_obj["challenger_player_score"] if json_obj["challenger_player_score"] >= 0 else None
-        challenged_player_score = json_obj["challenged_player_score"] if json_obj["challenged_player_score"] >= 0 else None
 
-        return Challenge(challenger_player, challenged_player, issued_at, completed_at, challenger_player_score, challenged_player_score)
+        return Challenge(challenger_player, challenged_player, issued_at)
     
     def is_match(self, player1: discord.Member, player2: discord.Member) -> bool:
             """Whether or not this challenge involves both of these players (true if player1 challenged player2 or player2 challenged player1)."""
@@ -81,6 +77,7 @@ class Challenge:
 class Ladder(JsonSerializable):
     """A ladder for a server. A ladder contains an ordered list of players."""
     guild: discord.Guild = field()
+    game: Videogame = field()
     players: list[Player] = field(compare=False, hash=False)
 
     def __eq__(self, other):
@@ -93,7 +90,17 @@ class Ladder(JsonSerializable):
         9-16: can challenge 3 above\n
         17+: can challenge 4 above, etc.\n
         Inactive players are skipped over, but still included in the final list, i.e. 2-4 can challenge any players up to the next active player."""
-        number_of_challengeable_players = math.ceil(math.log2(self.players.index(challenger) + 0.0001))
+        index = self.players.index(challenger)
+        if index == 0:
+            number_of_challengeable_players = 0
+        elif index <= 3:
+            number_of_challengeable_players = 1
+        elif index <= 7:
+            number_of_challengeable_players = 2
+        elif index <= 15:
+            number_of_challengeable_players = 3
+        else:
+            number_of_challengeable_players = 4
         number_of_active_players_found = 0
         players = []
         challenger_index = self.players.index(challenger)
@@ -109,10 +116,11 @@ class Ladder(JsonSerializable):
                 break
         return players
 
-    def to_json(self) -> dict[str, list[int]]:
+    def to_json(self) -> dict[str, int | float | str | dict]:
         """Convert the current ladder object to a JSON string."""
         return {
             "guild_id": self.guild.id,
+            "game": self.game.value,
             "players": [player.to_json() for player in self.players]
         }
 
@@ -120,8 +128,67 @@ class Ladder(JsonSerializable):
     async def from_json(bot: commands.Bot, json_obj: dict[str, int | float | str | dict]):
         """Convert a JSON dictionary to a ladder object."""
         guild = await bot.fetch_guild(int(json_obj["guild_id"]))
+        game = Videogame(json_obj["game"])
         players = [await Player.from_json(bot, player) for player in json_obj["players"]]
-        return Ladder(guild, players)
+        return Ladder(guild, game, players)
+    
+@dataclass(order=True)
+class ResultPlayer(JsonSerializable):
+    """A player after finishing a challenge."""
+
+    user: discord.Member = field()
+    characters: set[str] = field(compare=False, hash=False)
+    score: int = field()
+
+    def __hash__(self):
+        return hash(self.user.id)
+
+    def to_json(self) -> dict[str, int | float | str]:
+        """Convert the current result player object to a JSON string."""
+        return {
+            "user_id": self.user.id,
+            "characters": [character for character in self.characters],
+            "score": self.score
+        }
+
+    @staticmethod
+    async def from_json(bot: commands.Bot, json_obj: dict[str, int | float | str]):
+        """Convert a JSON dictionary to a result player object."""
+        user = await bot.fetch_user(json_obj["user_id"])
+        characters = set(json_obj.get("characters", {}))
+        score = json_obj.get("score", 0)
+        return ResultPlayer(user, characters, score)
+
+@dataclass(frozen=True, order=True)
+class Result(JsonSerializable):
+    """The results of a challenge."""
+
+    winner: ResultPlayer = field()
+    loser: ResultPlayer = field()
+    completed_at: datetime.datetime = field()
+    notes: str = field(compare=False, hash=False)
+
+    def to_json(self) -> dict[str, int | float | str]:
+        """Convert the current results object to a JSON string."""
+        return {
+            "winner": self.winner.to_json(),
+            "loser": self.loser.to_json(),
+            "completed_at": self.completed_at.timestamp(),
+            "notes": self.notes
+        }
+
+    @staticmethod
+    async def from_json(bot: commands.Bot, json_obj: dict[str, int | float | str]):
+        """Convert a JSON dictionary to a results object."""
+        winner = await ResultPlayer.from_json(bot, json_obj["winner"])
+        loser = await ResultPlayer.from_json(bot, json_obj["loser"])
+        completed_at = datetime.datetime.fromtimestamp(json_obj["completed_at"])
+        notes = json_obj.get("notes", "")
+        return Result(winner, loser, completed_at, notes)
+    
+    def is_match(self, player1: discord.Member, player2: discord.Member) -> bool:
+            """Whether or not this result involves both of these players (true if player1 beat player2 or player2 beat player1)."""
+            return (self.winner.user == player1 and self.loser.user == player2) or (self.winner.user == player2 and self.loser.user == player1)
     
 class PagedView[T](discord.ui.View):
     """A subclass of :class:`discord.ui.View` that presents an ordered list of entries, with a given number of entries per page."""

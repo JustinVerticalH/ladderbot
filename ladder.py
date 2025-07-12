@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from ioutils import ColorEmbed, write_json, initialize_from_json
-from structs import PagedView, Player, Ladder
+from structs import PagedView, Player, Ladder, Videogame
 
 
 @app_commands.guild_only()
@@ -21,12 +21,12 @@ class LadderCog(commands.GroupCog, name="ladder"):
 
     @app_commands.command()
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def create(self, interaction: discord.Interaction, are_you_sure: bool):
+    async def create(self, interaction: discord.Interaction, game: Videogame, are_you_sure: bool):
         """Create a new ladder for this server. THIS COMMAND WILL ERASE ANY EXISTING LADDER FOR THIS SERVER!"""
         if not are_you_sure:
             return await interaction.response.send_message("Are you sure?", ephemeral=True)
 
-        ladder = Ladder(interaction.guild, [])
+        ladder = Ladder(interaction.guild, game, [])
         self.ladders[interaction.guild] = ladder
         write_json(interaction.guild.id, "ladder", value=ladder.to_json())
 
@@ -66,7 +66,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
 
         challenges = self.bot.get_cog("challenge").challenges[interaction.guild]
-        active_challenges = {challenge for challenge in challenges if challenge.completed_at is not None and (challenge.challenger_player.user == interaction.user or challenge.challenged_player.user == interaction.user)}
+        active_challenges = {challenge for challenge in challenges if challenge.challenger_player.user == interaction.user or challenge.challenged_player.user == interaction.user}
         challenges -= active_challenges
         self.bot.get_cog("challenge").challenges[interaction.guild] = challenges
         write_json(interaction.guild, "challenges", value=[challenge.to_json() for challenge in challenges])
