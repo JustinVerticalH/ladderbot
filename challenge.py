@@ -29,63 +29,92 @@ class ChallengeSendSelect(discord.ui.Select):
         challenged_player = next(player for player in self.ladder.players if player.user.name == challenged_player_name)
         return await self.bot.get_cog("challenge").create_and_send_challenge(interaction, self.player, challenged_player)
 
-class CharacterSelect(discord.ui.Select):
-    """Allows a user to select the characters they used in a match."""
+class CharacterReportView(discord.ui.View):
+    """A view that lets users select a player and the characters they used in a match. Used af"""
     def __init__(self, interaction: discord.Interaction, result: Result, characters: set[str]):
         self.bot: commands.Bot = interaction.client
         self.result: Result = result
-        self.winner_characters: set[str] = result.winner.characters
-        self.loser_characters: set[str] = result.loser.characters
+        self.user_select = self.UserSelect(result)
+        self.character_select = self.CharacterSelect(result, characters)
+        super().__init__(timeout=None)
+        self.add_item(self.user_select)
+        self.add_item(self.character_select)
 
-        options = [discord.SelectOption(label=character) for character in sorted(characters)]
-        super().__init__(placeholder="Select character(s)", max_values=5, options=options)
+    async def listen_for_user_and_characters(self, interaction: discord.Interaction):
+        """Wait until both the user select and character select have been used, then update the result."""
+        while True:
+            # If the user has selected a player and characters, replace the existing result with this updated one
+            if self.user_select.player is not None and self.character_select.characters is not None:
+                # Create a new result with the updated characters
+                is_winner = self.user_select.player.user == self.result.winner.user
+                if is_winner:
+                    self.result.winner.characters = self.character_select.characters
+                else:
+                    self.result.loser.characters = self.character_select.characters
 
-    async def interaction_check(self, interaction):
-        """A callback that is called when an interaction happens within this item that checks whether the callback should be processed."""
-        return interaction.user == self.result.winner.user or interaction.user == self.result.loser.user
+                # Replace the existing result with this updated one
+                if self.result in self.bot.get_cog("challenge").results[interaction.guild]:
+                    self.bot.get_cog("challenge").results[interaction.guild].remove(self.result)
+                self.bot.get_cog("challenge").results[interaction.guild].add(self.result)
+                write_json(interaction.guild.id, "results", value=[result.to_json() for result in self.bot.get_cog("challenge").results[interaction.guild]])
+                return await interaction.followup.send(content="Characters updated!", ephemeral=True)
+            await asyncio.sleep(1)
 
-    async def callback(self, interaction: discord.Interaction):
-        """The callback associated with this UI item."""
-        # Create a new result with the updated characters
-        is_winner = interaction.user == self.result.winner.user
-        if is_winner:
-            self.result.winner.characters = set(self.values)
-            self.result.loser.characters = self.loser_characters
-        else:
-            self.result.winner.characters = self.winner_characters
-            self.result.loser.characters = set(self.values)
+    class UserSelect(discord.ui.Select):
+        """Allows a user to select which user they are reporting characters for."""
+        def __init__(self, result: Result):
+            """Allows a user to select the characters they used in a match."""
+            self.result: Result = result
+            self.player: ResultPlayer = None
 
-        # Replace the existing result with this updated one
-        if self.result in self.bot.get_cog("challenge").results[interaction.guild]:
-            self.bot.get_cog("challenge").results[interaction.guild].remove(self.result)
-        self.bot.get_cog("challenge").results[interaction.guild].add(self.result)
-        write_json(interaction.guild.id, "results", value=[result.to_json() for result in self.bot.get_cog("challenge").results[interaction.guild]])
-        return await interaction.response.send_message("Characters updated!", ephemeral=True)
+            options = [discord.SelectOption(label=player.user.name) for player in [self.result.winner, self.result.loser]]
+            super().__init__(placeholder="Select user", options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            """The callback associated with this UI item."""
+            self.player = next(player for player in [self.result.winner, self.result.loser] if player.user.name == self.values[0])
+            return await interaction.response.defer()
+
+    class CharacterSelect(discord.ui.Select):
+        """Allows a user to select the characters used by someone in a match."""
+        def __init__(self, result: Result, characters: set[str]):
+            """Allows a user to select the characters they used in a match."""
+            self.result: Result = result
+            self.characters: set[str] = None
+
+            options = [discord.SelectOption(label=character) for character in sorted(characters)]
+            super().__init__(placeholder="Select character(s)", max_values=5, options=options)
+
+        async def callback(self, interaction: discord.Interaction):
+            """The callback associated with this UI item."""
+            # Create a new result with the updated characters
+            self.characters = set(self.values)
+            return await interaction.response.defer()
     
 class ChallengeReportView(discord.ui.View):
     """A view for reporting the results of a challenge. Contains buttons to confirm results and report characters."""
     def __init__(self, interaction: discord.Interaction, challenge: Challenge, user_to_verify: discord.Member, result: Result, ladder: Ladder, message: discord.Message):
-        super().__init__(timeout=None)
         self.bot: commands.Bot = interaction.client
         self.challenge: Challenge = challenge
         self.user_to_verify: discord.Member = user_to_verify
         self.result: Result = result
         self.ladder: Ladder = ladder
         self.message: discord.Message = message
+        super().__init__(timeout=None)
 
     @discord.ui.button(emoji="👥", style=discord.ButtonStyle.blurple, label="Report characters")
     async def report_characters(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Saves the characters used by this player in this match and updates the result."""
         with open("characters.json", "r") as file:
             characters = json.load(file)[self.ladder.game.value]
-        view = discord.ui.View(timeout=None)
-        view.add_item(CharacterSelect(interaction, self.result, characters))
+        view = CharacterReportView(interaction, self.result, set(characters))
         await interaction.response.send_message(view=view, ephemeral=True)
+        await view.listen_for_user_and_characters(interaction)
 
     @discord.ui.button(emoji="✅", style=discord.ButtonStyle.blurple, label="Confirm")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Confirm the results of a match. This verifies that both players acknowledge that the results are accurate."""
-        if not (interaction.user == self.user_to_verify or interaction.user.guild_permissions.manage_guild):
+        if not (interaction.user == self.user_to_verify):
             return
         await self.bot.get_cog("challenge").complete_challenge(interaction, self.challenge, self.result, self.message)
 
@@ -131,6 +160,22 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
             if challenged_player is None:
                 return await interaction.response.send_message("This user is not in this server's ladder!", ephemeral=True)
             return await self.create_and_send_challenge(interaction, challenger_player, challenged_player)
+
+    @app_commands.command()
+    async def cancel(self, interaction: discord.Interaction, versus: discord.Member):
+        """Cancel a challenge you have sent to another user."""
+        if not await self.verify_user_in_ladder(interaction):
+            return
+        if interaction.guild not in self.challenges:
+            return await interaction.response.send_message("No challenges!", ephemeral=True)
+
+        challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(interaction.user, versus)), None)
+        if challenge is None:
+            return await interaction.response.send_message("Could not find a challenge for that user!", ephemeral=True)
+
+        self.challenges[interaction.guild].discard(challenge)
+        write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in self.challenges[interaction.guild]])
+        await interaction.response.send_message(f"Cancelled challenge to {versus.mention}!", ephemeral=True)
 
     @app_commands.command()
     async def report(self, interaction: discord.Interaction, versus: discord.Member, winner: discord.Member, score: app_commands.Range[str, 3, 3], notes: str = ""):
