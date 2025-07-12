@@ -144,9 +144,10 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         
         confirmation_time = datetime.datetime.now() + datetime.timedelta(hours=HOURS_UNTIL_AUTO_VERIFY)
         description= \
-            f"{interaction.user.mention} has reported: **{winner.mention} {score} {interaction.user.mention if versus == winner else versus.mention}**.\n \
+            f"{interaction.user.mention} has reported: {winner.mention} {score} {interaction.user.mention if versus == winner else versus.mention}.\n \
             Click the button below to confirm, or run this command again to report a different score.\n \
-            This challenge will automatically confirm {format_dt(confirmation_time, style='R')}.\n"
+            This challenge will automatically confirm {format_dt(confirmation_time, style='R')}.\n \
+            {f"Notes: {notes}" if notes else ""}"
         embed = ColorEmbed(title="Winner!", description=description)
         response = await interaction.response.send_message(embed=embed)
 
@@ -185,7 +186,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         result_to_str = lambda result: \
             f"{result.winner.user.mention} {"("+','.join(result.winner.characters)+")" if len(result.winner.characters) > 0 else ""} \
             {result.winner.score}-{result.loser.score} \
-            {result.loser.user.mention} {"("+','.join(result.loser.characters)+")" if len(result.loser.characters) > 0 else ""} - {format_dt(result.completed_at, style='R')}"
+            {result.loser.user.mention} {"("+','.join(result.loser.characters)+")" if len(result.loser.characters) > 0 else ""} - {format_dt(result.completed_at, style='R')}\n \
+            {"Notes: " + result.notes if result.notes else ""}"
         view = PagedView(self.bot, "Past challenges", results, result_to_str)
         await view.send(interaction, ephemeral=ephemeral)
 
