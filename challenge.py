@@ -235,11 +235,11 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
         recent_result = next((result for result in self.results[interaction.guild] if result.is_match(interaction.user, user) and result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now()), None)
         if recent_result is not None:
-            return await interaction.response.send_message(f"You have already played {user.mention} recently! You can play them again {format_dt(recent_result.completed_at, style='R')}.", ephemeral=True)
+            return await interaction.response.send_message(f"You have already played {user.mention} recently! You can play them again {format_dt(recent_result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN, style='R')}.", ephemeral=True)
         
         existing_challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(interaction.user, user)), None)
         if existing_challenge is not None:
-            return await interaction.response.send_message(f"You have already challenged {user.mention}. Finish this challenge first!", ephemeral=True)
+            return await interaction.response.send_message(f"You have already challenged {user.mention} {format_dt(existing_challenge.issued_at, style='R')}. Finish this challenge first!", ephemeral=True)
 
         ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
         challenger_player = next((player for player in ladder.players if player.user == interaction.user), None)
