@@ -76,6 +76,21 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
+    async def active(self, interaction: discord.Interaction):
+        """Set yourself back to active. Otherwise, if you do not send or play any challenges in the next week, you will be considered inactive."""
+        if not await self.verify_ladder_exists(interaction):
+            return
+        
+        player = Player(interaction.user, None)
+        if player not in self.ladders[interaction.guild].players:
+            return await interaction.response.send_message("You are not in this server's ladder.", ephemeral=True)
+
+        player.last_active_date = datetime.datetime.now()
+        self.ladders[interaction.guild].players[self.ladders[interaction.guild].players.index(player)] = player
+        write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
+        await interaction.response.send_message(f"You have updated your last active time! You will become inactive again if you do not send or play any challenges in the next week.", ephemeral=True)
+
+    @app_commands.command()
     async def rankings(self, interaction: discord.Interaction, ephemeral: bool = True):
         """List the current standings of this server's ladder."""
         if not await self.verify_ladder_exists(interaction):
