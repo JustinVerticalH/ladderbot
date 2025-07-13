@@ -11,6 +11,12 @@ class MiscCog(commands.Cog, name="misc"):
         self.bot = bot
         super().__init__()
 
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild: discord.Guild):
+        """Sends a welcome message when the bot joins a guild."""
+        embed = ColorEmbed(title="Ladderbot", description= "Hi! Thank you for adding me to your server!\nUse the `/ladder create` command to set up a ladder for your server.")
+        await guild.system_channel.send(embed=embed)
+
     @app_commands.command()
     async def help(self, interaction: discord.Interaction, ephemeral: bool = True):
         """What is this bot?"""
