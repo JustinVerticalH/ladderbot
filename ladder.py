@@ -76,8 +76,8 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
-    async def active(self, interaction: discord.Interaction):
-        """Set yourself back to active. Otherwise, if you do not send or play any challenges in the next week, you will be considered inactive."""
+    async def activate(self, interaction: discord.Interaction):
+        """Set yourself back to active. You will be considered inactive if you do not send or play any challenges in the next week."""
         if not await self.verify_ladder_exists(interaction):
             return
         
@@ -88,7 +88,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         player.last_active_date = datetime.datetime.now()
         self.ladders[interaction.guild].players[self.ladders[interaction.guild].players.index(player)] = player
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
-        await interaction.response.send_message(f"You have updated your last active time! You will become inactive again if you do not send or play any challenges in the next week.", ephemeral=True)
+        await interaction.response.send_message(f"You are now active! You will become inactive again if you do not send or play any challenges in the next week.", ephemeral=True)
 
     @app_commands.command()
     async def rankings(self, interaction: discord.Interaction, ephemeral: bool = True):
