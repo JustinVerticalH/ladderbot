@@ -111,7 +111,7 @@ class ChallengeReportView(discord.ui.View):
         await interaction.response.send_message(view=view, ephemeral=True)
         await view.listen_for_user_and_characters(interaction)
 
-    @discord.ui.button(emoji="✅", style=discord.ButtonStyle.blurple, label="Confirm")
+    @discord.ui.button(emoji="✅", style=discord.ButtonStyle.green, label="Confirm")
     async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Confirm the results of a match. This verifies that both players acknowledge that the results are accurate."""
         if not (interaction.user == self.user_to_verify):
