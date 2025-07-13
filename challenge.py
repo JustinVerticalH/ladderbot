@@ -93,13 +93,14 @@ class CharacterReportView(discord.ui.View):
     
 class ChallengeReportView(discord.ui.View):
     """A view for reporting the results of a challenge. Contains buttons to confirm results and report characters."""
-    def __init__(self, interaction: discord.Interaction, challenge: Challenge, user_to_verify: discord.Member, result: Result, ladder: Ladder, message: discord.Message):
+    def __init__(self, interaction: discord.Interaction, challenge: Challenge, user_to_verify: discord.Member, result: Result, ladder: Ladder, message: discord.Message, is_edit: bool):
         self.bot: commands.Bot = interaction.client
         self.challenge: Challenge = challenge
         self.user_to_verify: discord.Member = user_to_verify
         self.result: Result = result
         self.ladder: Ladder = ladder
         self.message: discord.Message = message
+        self.is_edit: bool = is_edit
         super().__init__(timeout=None)
 
     @discord.ui.button(emoji="👥", style=discord.ButtonStyle.blurple, label="Report characters")
@@ -116,7 +117,7 @@ class ChallengeReportView(discord.ui.View):
         """Confirm the results of a match. This verifies that both players acknowledge that the results are accurate."""
         if not (interaction.user == self.user_to_verify):
             return
-        await self.bot.get_cog("challenge").complete_challenge(interaction, self.challenge, self.result, self.message)
+        await self.bot.get_cog("challenge").complete_challenge(interaction, self.challenge, self.result, self.message, self.is_edit)
 
 @app_commands.guild_only()
 class ChallengeCog(commands.GroupCog, name="challenge"):
@@ -180,31 +181,41 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     @app_commands.command()
     async def report(self, interaction: discord.Interaction, versus: discord.Member, winner: discord.Member, score: app_commands.Range[str, 3, 3], notes: str = ""):
         """Report the results of a finished challenge. If the challenger wins, they swap places!"""
-        if winner != interaction.user and winner != versus:
-            return await interaction.response.send_message("The winner must be one of the two players playing.", ephemeral=True)
+        await self.report_challenge(interaction, versus, winner, score, notes, is_edit=False)
 
-        challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(interaction.user, versus)), None)
-        if challenge is None:
+    @app_commands.command()
+    async def edit(self, interaction: discord.Interaction, versus: discord.Member, winner: discord.Member, score: app_commands.Range[str, 3, 3]):
+        """Edit the results of a challenge that has already been reported."""
+        await self.report_challenge(interaction, versus, winner, score, "", is_edit=True)
+
+    @app_commands.command()
+    async def undo(self, interaction: discord.Interaction, versus: discord.Member):
+        """Undo results that have already been reported and confirmed."""
+        if not await self.verify_user_in_ladder(interaction):
+            return
+        if interaction.guild not in self.challenges:
+            return await interaction.response.send_message("No challenges!", ephemeral=True)
+
+        result = next((result for result in self.results[interaction.guild] if result.is_match(interaction.user, versus)), None)
+        if result is None:
             return await interaction.response.send_message("Could not find a challenge for that user!", ephemeral=True)
-        
-        confirmation_time = datetime.datetime.now() + datetime.timedelta(hours=HOURS_UNTIL_AUTO_VERIFY)
-        description= \
-            f"{interaction.user.mention} has reported: {winner.mention} {score} {interaction.user.mention if versus == winner else versus.mention}.\n \
-            Click the button below to confirm, or run this command again to report a different score.\n \
-            This challenge will automatically confirm {format_dt(confirmation_time, style='R')}.\n \
-            {f"Notes: {notes}" if notes else ""}"
-        embed = ColorEmbed(title="Winner!", description=description)
-        response = await interaction.response.send_message(embed=embed)
 
-        message = await interaction.channel.fetch_message(response.message_id)
-        winner_player = ResultPlayer(winner, [], self.str_to_scores(score)[0])
-        loser_player = ResultPlayer(versus if interaction.user == winner else interaction.user, [], self.str_to_scores(score)[1])
-        result = Result(winner_player, loser_player, datetime.datetime.now(), notes)
-        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
-        view = ChallengeReportView(interaction, challenge, versus, result, ladder, message)
-        await message.edit(embed=embed, view=view)
-        await asyncio.sleep(HOURS_UNTIL_AUTO_VERIFY * 60 * 60) # If this report has not been verified by the other user after X hours, auto-verify
-        await self.complete_challenge(interaction, challenge, result, message)
+        if result.is_upset:
+            # Swap the players' positions back
+            ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
+            winner_player = next((player for player in self.bot.get_cog("ladder").ladders[interaction.guild].players if player.user == result.winner.user), None)
+            loser_player = next((player for player in self.bot.get_cog("ladder").ladders[interaction.guild].players if player.user == result.loser.user), None)
+            lower_position = ladder.players.index(winner_player)
+            higher_position = ladder.players.index(loser_player)
+            temp = winner_player
+            ladder.players[lower_position] = loser_player
+            ladder.players[higher_position] = temp
+            self.bot.get_cog("ladder").ladders[interaction.guild] = ladder
+            write_json(interaction.guild.id, "ladder", value=ladder.to_json())
+        self.results[interaction.guild].discard(result)
+        write_json(interaction.guild.id, "results", value=[result.to_json() for result in self.challenges[interaction.guild]])
+        await interaction.response.send_message(embed=ColorEmbed(title="Challenge!", description=f"Undid the results of {interaction.user.mention} vs. {versus.mention}. \
+                                                                 {"\nThey have swapped positions back." if result.is_upset else ""}"))
 
     @app_commands.command()
     async def inprogress(self, interaction: discord.Interaction, ephemeral: bool = True):
@@ -253,40 +264,94 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         embed = ColorEmbed(title="Challenge!", description=f"You have been challenged by {challenger_player.user.mention}!")
         await interaction.response.send_message(challenged_player.user.mention, embed=embed)
 
-    async def complete_challenge(self, interaction: discord.Interaction, challenge: Challenge, result: Result, message: discord.Message):
-        """Update a challenge's status and edit the confirmation message."""
-        if challenge not in self.challenges[interaction.guild]:
-            embed = ColorEmbed(title="Winner!", description="This challenge has already been reported!")
-            return await message.edit(embed=embed, view=None)
-        
-        challenge.challenger_player.last_active_date = datetime.datetime.now()
-        challenge.challenged_player.last_active_date = datetime.datetime.now()
+    async def report_challenge(self, interaction: discord.Interaction, versus: discord.Member, winner: discord.Member, score: str, notes: str, is_edit: bool):
+        """Report the results of a challenge."""
+        if winner != interaction.user and winner != versus:
+            return await interaction.response.send_message("The winner must be one of the two players playing.", ephemeral=True)
+
+        if is_edit:
+            result = next((result for result in self.results[interaction.guild] if result.is_match(interaction.user, versus)), None)
+            challenge = None
+        else:
+            challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(interaction.user, versus)), None)
+            result = None
+        if result is None and challenge is None:
+            return await interaction.response.send_message("Could not find a challenge for that user!", ephemeral=True)
+
+        confirmation_time = datetime.datetime.now() + datetime.timedelta(hours=HOURS_UNTIL_AUTO_VERIFY)
+        description= \
+            f"{interaction.user.mention} has reported a set!\n \
+            {"New score:" if is_edit else"Score:"} {winner.mention} {score} {interaction.user.mention if versus == winner else versus.mention}.\n \
+            {versus.mention}: Click the button below to confirm, or run this command again to report a different score.\n \
+            This challenge will automatically confirm {format_dt(confirmation_time, style='R')}.\n \
+            {f"Notes: {notes}" if notes else ""}"
+        embed = ColorEmbed(title="Winner!", description=description)
+        response = await interaction.response.send_message(embed=embed)
+
+        message = await interaction.channel.fetch_message(response.message_id)
+        winner_player_results = ResultPlayer(winner, [], self.str_to_scores(score)[0])
+        loser_player_results = ResultPlayer(versus if interaction.user == winner else interaction.user, [], self.str_to_scores(score)[1])
+        winner_player = next((player for player in self.bot.get_cog("ladder").ladders[interaction.guild].players if player.user == winner_player_results.user), None)
+        loser_player = next((player for player in self.bot.get_cog("ladder").ladders[interaction.guild].players if player.user == loser_player_results.user), None)
 
         ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
-        lower_position = ladder.players.index(challenge.challenger_player)
-        higher_position = ladder.players.index(challenge.challenged_player)
-        if result.winner.user == challenge.challenger_player.user:
+        if is_edit:
+            existing_result = next((result for result in self.results[interaction.guild] if result.is_match(winner_player_results.user, loser_player_results.user)), None)
+            is_same_winner = existing_result.winner.user == winner
+            is_upset = (is_same_winner and existing_result.is_upset) or (not is_same_winner and not existing_result.is_upset)
+        else:
+            is_upset = ladder.players.index(winner_player) > ladder.players.index(loser_player) # True if the winner was lower on the ladder than the loser
+        result = Result(winner_player_results, loser_player_results, datetime.datetime.now(), is_upset, notes)
+        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
+        view = ChallengeReportView(interaction, challenge, versus, result, ladder, message, is_edit)
+        await message.edit(embed=embed, view=view)
+        await asyncio.sleep(HOURS_UNTIL_AUTO_VERIFY * 60 * 60) # If this report has not been verified by the other user after X hours, auto-verify
+        await self.complete_challenge(interaction, challenge, result, message)
+
+    async def complete_challenge(self, interaction: discord.Interaction, challenge: Challenge, result: Result, message: discord.Message, is_edit: bool):
+        """Update a challenge's status and edit the confirmation message."""
+        if not is_edit and challenge not in self.challenges[interaction.guild]:
+            embed = ColorEmbed(title="Winner!", description="This challenge has already been reported!")
+            return await message.edit(embed=embed, view=None)
+
+        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
+        if challenge is not None:
+            player1 = challenge.challenger_player
+            player2 = challenge.challenged_player
+        else:
+            player1 = next((player for player in ladder.players if player.user == result.winner.user), None)
+            player2 = next((player for player in ladder.players if player.user == result.loser.user), None)
+
+        player1.last_active_date = datetime.datetime.now()
+        player2.last_active_date = datetime.datetime.now()
+
+        lower_position = max(ladder.players.index(player1), ladder.players.index(player2))
+        higher_position = min(ladder.players.index(player1), ladder.players.index(player2))
+        if (result is not None and result.is_upset) or (challenge is not None and result.winner.user == challenge.challenger_player.user):
             # Swap the players' positions
-            temp = challenge.challenger_player
-            ladder.players[lower_position] = challenge.challenged_player
+            temp = player1
+            ladder.players[lower_position] = player2
             ladder.players[higher_position] = temp
             self.bot.get_cog("ladder").ladders[interaction.guild] = ladder
             write_json(interaction.guild.id, "ladder", value=ladder.to_json())
 
-            description=f"{challenge.challenger_player.user.mention} has defeated {challenge.challenged_player.user.mention}!\nThey have climbed from {ordinal(lower_position+1)} to {ordinal(higher_position+1)}."
+            description=f"{player1.user.mention} has defeated {player2.user.mention}!\nThey have climbed from {ordinal(lower_position+1)} to {ordinal(higher_position+1)}."
             embed = ColorEmbed(title="Winner!", description=description)
         else:
-            description=f"{challenge.challenged_player.user.mention} has defended their spot against {challenge.challenger_player.user.mention}!\nThey remain at {ordinal(higher_position+1)}."
+            description=f"{player1.user.mention} has defended their spot against {player2.user.mention}!\nThey remain at {ordinal(higher_position+1)}."
             embed = ColorEmbed(title="Winner!", description=description)
 
         # Write everything to storage file
-        ladder.players = [challenge.challenger_player if player == challenge.challenger_player else challenge.challenged_player if player == challenge.challenger_player else player for player in ladder.players]
+        ladder.players = [player1 if player == player1 else player2 if player == player2 else player for player in ladder.players]
         self.bot.get_cog("ladder").ladders[interaction.guild] = ladder
         write_json(interaction.guild.id, "ladder", value=ladder.to_json())
         await message.edit(embed=embed, view=None)
         self.challenges[interaction.guild].discard(challenge)
         write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in self.challenges[interaction.guild]])
         self.results[interaction.guild].discard(result) # In case an old version of the result already exists (if the other player has already reported the result)
+        if is_edit:
+            existing_result = next((result for result in self.results[interaction.guild] if result.is_match(result.winner.user, result.loser.user)), None)
+            self.results[interaction.guild].discard(existing_result)
         self.results[interaction.guild].add(result)
         write_json(interaction.guild.id, "results", value=[result.to_json() for result in self.results[interaction.guild]])
 

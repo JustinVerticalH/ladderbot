@@ -23,6 +23,9 @@ class Player(JsonSerializable):
 
     def __eq__(self, other):
         return self.user.id == other.user.id
+    
+    def __hash__(self):
+        return hash(self.user.id)
 
     def is_active(self) -> bool:
         """Whether or not the player is active. A player is active if they have completed a challenge (as challenger or challenged) in the past two weeks."""
@@ -166,7 +169,8 @@ class Result(JsonSerializable):
     winner: ResultPlayer = field()
     loser: ResultPlayer = field()
     completed_at: datetime.datetime = field()
-    notes: str = field(compare=False, hash=False)
+    is_upset: bool = field(default=False, compare=False, hash=False) # Whether the player who was originally lower ranked won
+    notes: str = field(default="", compare=False, hash=False)
 
     def to_json(self) -> dict[str, int | float | str]:
         """Convert the current results object to a JSON string."""
@@ -174,6 +178,7 @@ class Result(JsonSerializable):
             "winner": self.winner.to_json(),
             "loser": self.loser.to_json(),
             "completed_at": self.completed_at.timestamp(),
+            "is_upset": self.is_upset,
             "notes": self.notes
         }
 
@@ -183,12 +188,13 @@ class Result(JsonSerializable):
         winner = await ResultPlayer.from_json(bot, json_obj["winner"])
         loser = await ResultPlayer.from_json(bot, json_obj["loser"])
         completed_at = datetime.datetime.fromtimestamp(json_obj["completed_at"])
+        is_upset = json_obj.get("is_upset", False)
         notes = json_obj.get("notes", "")
-        return Result(winner, loser, completed_at, notes)
+        return Result(winner, loser, completed_at, is_upset, notes)
     
     def is_match(self, player1: discord.Member, player2: discord.Member) -> bool:
-            """Whether or not this result involves both of these players (true if player1 beat player2 or player2 beat player1)."""
-            return (self.winner.user == player1 and self.loser.user == player2) or (self.winner.user == player2 and self.loser.user == player1)
+        """Whether or not this result involves both of these players (true if player1 beat player2 or player2 beat player1)."""
+        return (self.winner.user == player1 and self.loser.user == player2) or (self.winner.user == player2 and self.loser.user == player1)
     
 class PagedView[T](discord.ui.View):
     """A subclass of :class:`discord.ui.View` that presents an ordered list of entries, with a given number of entries per page."""
