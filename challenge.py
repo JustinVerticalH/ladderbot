@@ -124,6 +124,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     """Handles issuing challenges for a ladder."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.bot.tree.add_command(app_commands.ContextMenu(name="Challenge", callback=self.send_challenge)) # You can't use @app_commands.context_menu() in a cog
         self.challenges: dict[discord.Guild, set[Challenge]] = {} # Maps a server to its list of challenges
         self.results: dict[discord.Guild, set[Result]] = {} # Maps a server to its list of results
 
@@ -137,30 +138,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
     @app_commands.command()
     async def someone(self, interaction: discord.Interaction, user: discord.Member = None):
-        """Sends a challenge to another user in the ladder."""
-        if not await self.verify_user_in_ladder(interaction):
-            return
-        if interaction.guild not in self.challenges:
-            self.challenges[interaction.guild] = set() # Initialize the set of challenges for this guild if necessary
-
-        recent_result = next((result for result in self.results[interaction.guild] if result.is_match(interaction.user, user) and result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now()), None)
-        if recent_result is not None:
-            return await interaction.response.send_message(f"You have already challenged {user.mention}. Finish this challenge first!", ephemeral=True)
-
-        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
-        challenger_player = next((player for player in ladder.players if player.user == interaction.user), None)
-        challengeable_players = ladder.challengeable_players(challenger_player)
-        if len(challengeable_players) == 0:
-            return await interaction.response.send_message("There are no users for you to challenge!", ephemeral=True)
-
-        if user is None:
-            view = discord.ui.View().add_item(ChallengeSendSelect(interaction, challenger_player, ladder))
-            return await interaction.response.send_message(view=view, ephemeral=True)
-        else:
-            challenged_player = next((player for player in ladder.players if player.user == user), None)
-            if challenged_player is None:
-                return await interaction.response.send_message("This user is not in this server's ladder!", ephemeral=True)
-            return await self.create_and_send_challenge(interaction, challenger_player, challenged_player)
+        """Send a challenge to another user in the ladder."""
+        await self.send_challenge(interaction, user)
 
     @app_commands.command()
     async def cancel(self, interaction: discord.Interaction, versus: discord.Member):
@@ -246,6 +225,32 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
             {"Notes: " + result.notes if result.notes else ""}"
         view = PagedView(self.bot, "Past challenges", results, result_to_str)
         await view.send(interaction, ephemeral=ephemeral)
+
+    async def send_challenge(self, interaction: discord.Interaction, user: discord.Member):
+        """Sends a challenge to another user in the ladder."""
+        if not await self.verify_user_in_ladder(interaction):
+            return
+        if interaction.guild not in self.challenges:
+            self.challenges[interaction.guild] = set() # Initialize the set of challenges for this guild if necessary
+
+        recent_result = next((result for result in self.results[interaction.guild] if result.is_match(interaction.user, user) and result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now()), None)
+        if recent_result is not None:
+            return await interaction.response.send_message(f"You have already challenged {user.mention}. Finish this challenge first!", ephemeral=True)
+
+        ladder = self.bot.get_cog("ladder").ladders[interaction.guild]
+        challenger_player = next((player for player in ladder.players if player.user == interaction.user), None)
+        challengeable_players = ladder.challengeable_players(challenger_player)
+        if len(challengeable_players) == 0:
+            return await interaction.response.send_message("There are no users for you to challenge!", ephemeral=True)
+
+        if user is None:
+            view = discord.ui.View().add_item(ChallengeSendSelect(interaction, challenger_player, ladder))
+            return await interaction.response.send_message(view=view, ephemeral=True)
+        else:
+            challenged_player = next((player for player in ladder.players if player.user == user), None)
+            if challenged_player is None:
+                return await interaction.response.send_message("This user is not in this server's ladder!", ephemeral=True)
+            return await self.create_and_send_challenge(interaction, challenger_player, challenged_player)
 
     async def create_and_send_challenge(self, interaction: discord.Interaction, challenger_player: Player, challenged_player: Player):
         """Create a challenge and send a message to the challenged player."""
