@@ -175,7 +175,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
         self.challenges[interaction.guild].discard(challenge)
         write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in self.challenges[interaction.guild]])
-        await interaction.response.send_message(f"Cancelled challenge to {versus.mention}!", ephemeral=True)
+        await interaction.response.send_message(embed=ColorEmbed(title="Challenge!", description=f"Cancelled challenge vs. {versus.mention}."))
 
     @app_commands.command()
     async def report(self, interaction: discord.Interaction, versus: discord.Member, winner: discord.Member, score: app_commands.Range[str, 3, 3], notes: str = ""):
