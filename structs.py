@@ -17,7 +17,7 @@ class Videogame(Enum):
 
 @dataclass(order=True)
 class Player(JsonSerializable):
-    """A player in a ladder. A player becomes inactive if they have not played in the past two weeks."""
+    """A player in a ladder. A player becomes inactive if they have not played in the past week."""
     user: discord.Member = field()
     last_active_date: datetime.datetime = field(compare=False, hash=False)
 
@@ -28,8 +28,8 @@ class Player(JsonSerializable):
         return hash(self.user.id)
 
     def is_active(self) -> bool:
-        """Whether or not the player is active. A player is active if they have completed a challenge (as challenger or challenged) in the past two weeks."""
-        return (self.last_active_date + datetime.timedelta(weeks=2)) > datetime.datetime.now()
+        """Whether or not the player is active. A player is active if they have completed a challenge (as challenger or challenged) in the past week."""
+        return (self.last_active_date + datetime.timedelta(weeks=1)) > datetime.datetime.now()
 
     def to_json(self) -> dict[str, int | float | str]:
         """Convert the current player object to a JSON string."""
