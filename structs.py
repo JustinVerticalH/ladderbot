@@ -41,7 +41,7 @@ class Player(JsonSerializable):
     @staticmethod
     async def from_json(bot: commands.Bot, json_obj: dict[str, int | float | str]):
         """Convert a JSON dictionary to a player object."""
-        user = bot.get_user(int(json_obj["user_id"]))
+        user = await bot.fetch_user(int(json_obj["user_id"]))
         last_active_date = datetime.datetime.fromtimestamp(json_obj["last_active_date"])
         return Player(user, last_active_date)
 
