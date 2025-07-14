@@ -74,3 +74,10 @@ class FAQView(discord.ui.View):
         embed= ColorEmbed(title=button.label, description= \
         "After finishing a challenge, you must wait one week before you can challenge the same person again. Try challenging someone else!")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="What if I have a suggestion?", style=discord.ButtonStyle.blurple)
+    async def question5(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Answers the question in the label."""
+        embed= ColorEmbed(title=button.label, description= \
+        "DM me, `verticalh`! I can't promise that I'll get to everything, but I'm always open to ideas.")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
