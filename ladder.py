@@ -22,11 +22,11 @@ class LadderCog(commands.GroupCog, name="ladder"):
     @app_commands.command()
     @app_commands.checks.has_permissions(manage_guild=True)
     async def create(self, interaction: discord.Interaction, game: Videogame, are_you_sure: bool):
-        """Create a new ladder for this server. THIS COMMAND WILL ERASE ANY EXISTING LADDER FOR THIS SERVER!"""
+        """Create a new ladder for this server. THIS COMMAND WILL ERASE ANY EXISTING LADDER FOR THIS SERVER! Admins only!"""
         if not are_you_sure:
             return await interaction.response.send_message("Are you sure?", ephemeral=True)
 
-        ladder = Ladder(interaction.guild, game, [])
+        ladder = Ladder(interaction.guild, game, [], False)
         self.ladders[interaction.guild] = ladder
         write_json(interaction.guild.id, "ladder", value=ladder.to_json())
 
@@ -42,7 +42,9 @@ class LadderCog(commands.GroupCog, name="ladder"):
         """Join this server's ladder."""
         if not await self.verify_ladder_exists(interaction):
             return
-        
+        if not self.verify_ladder_is_not_frozen(interaction):
+            return
+
         player = Player(interaction.user, datetime.datetime.now())
         if player in self.ladders[interaction.guild].players:
             return await interaction.response.send_message("You have already joined this server's ladder.", ephemeral=True)
@@ -58,7 +60,9 @@ class LadderCog(commands.GroupCog, name="ladder"):
         """Leave this server's ladder."""
         if not await self.verify_ladder_exists(interaction):
             return
-        
+        if not self.verify_ladder_is_not_frozen(interaction):
+            return
+
         player = Player(interaction.user, None)
         if player not in self.ladders[interaction.guild].players:
             return await interaction.response.send_message("You are not in this server's ladder.", ephemeral=True)
@@ -74,6 +78,21 @@ class LadderCog(commands.GroupCog, name="ladder"):
         description = f"**{interaction.user.mention} has left this server's ladder!**\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
         embed = ColorEmbed(title="Player left!", description=description)
         return await interaction.response.send_message(embed=embed)
+
+    @app_commands.command()
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def freeze(self, interaction: discord.Interaction, frozen: bool, ephemeral: bool = True):
+        """Freeze this server's ladder. No one can join, leave, or challenge while the ladder is frozen. Admins only!"""
+        if not await self.verify_ladder_exists(interaction):
+            return
+        
+        self.ladders[interaction.guild].is_frozen = frozen
+        write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
+        if frozen:
+            embed = ColorEmbed(title="Ladder Frozen!", description="No one can join, leave, or challenge while the ladder is frozen.")
+        else:
+            embed = ColorEmbed(title="Ladder Unfrozen!", description="Players can now join, leave, or challenge.")
+        return await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
     @app_commands.command()
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -104,7 +123,9 @@ class LadderCog(commands.GroupCog, name="ladder"):
         """Set yourself back to active. You will be considered inactive if you do not send or play any challenges in the next week."""
         if not await self.verify_ladder_exists(interaction):
             return
-        
+        if not await self.verify_ladder_is_not_frozen(interaction):
+            return
+
         player = Player(interaction.user, None)
         if player not in self.ladders[interaction.guild].players:
             return await interaction.response.send_message("You are not in this server's ladder.", ephemeral=True)
@@ -136,5 +157,12 @@ class LadderCog(commands.GroupCog, name="ladder"):
         print(f"Ladders: {self.ladders.values()}")
         if self.ladders[interaction.guild] is None:
             await interaction.response.send_message("This server does not have a ladder yet. Use the `/ladder create` command!", ephemeral=True)
+            return False
+        return True
+    
+    async def verify_ladder_is_not_frozen(self, interaction: discord.Interaction) -> bool:
+        """Checks if the ladder is frozen for this interaction's guild, and if so, sends a warning message."""
+        if self.ladders[interaction.guild].is_frozen:
+            await interaction.response.send_message("This server's ladder is currently frozen. Please wait until it is unfrozen to use this command.", ephemeral=True)
             return False
         return True

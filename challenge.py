@@ -146,6 +146,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         """Cancel a challenge you have sent to another user."""
         if not await self.verify_user_in_ladder(interaction):
             return
+        if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
+            return
         if interaction.guild not in self.challenges:
             return await interaction.response.send_message("No challenges!", ephemeral=True)
 
@@ -171,6 +173,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     async def undo(self, interaction: discord.Interaction, versus: discord.Member):
         """Undo results that have already been reported and confirmed."""
         if not await self.verify_user_in_ladder(interaction):
+            return
+        if not await self.verify_ladder_is_not_frozen(interaction):
             return
         if interaction.guild not in self.challenges:
             return await interaction.response.send_message("No challenges!", ephemeral=True)
@@ -234,6 +238,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         """Sends a challenge to another user in the ladder."""
         if not await self.verify_user_in_ladder(interaction):
             return
+        if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
+            return
         if interaction.guild not in self.challenges:
             self.challenges[interaction.guild] = set() # Initialize the set of challenges for this guild if necessary
 
@@ -262,6 +268,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
     async def create_and_send_challenge(self, interaction: discord.Interaction, challenger_player: Player, challenged_player: Player):
         """Create a challenge and send a message to the challenged player."""
+        if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
+            return
         existing_challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(challenger_player.user, challenged_player.user)), None)
         if existing_challenge is not None:
             return await interaction.response.send_message(f"You have already challenged this user {format_dt(existing_challenge.issued_at, style='R')}!", ephemeral=True)
@@ -279,6 +287,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
     async def report_challenge(self, interaction: discord.Interaction, versus: discord.Member, winner: discord.Member, score: str, notes: str, is_edit: bool):
         """Report the results of a challenge."""
+        if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
+            return
         if winner != interaction.user and winner != versus:
             return await interaction.response.send_message("The winner must be one of the two players playing.", ephemeral=True)
 
@@ -323,6 +333,8 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
     async def complete_challenge(self, interaction: discord.Interaction, challenge: Challenge, result: Result, message: discord.Message, is_edit: bool):
         """Update a challenge's status and edit the confirmation message."""
+        if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
+            return
         if not is_edit and challenge not in self.challenges[interaction.guild]:
             embed = ColorEmbed(title="Winner!", description="This challenge has already been reported!")
             return await message.edit(embed=embed, view=None)

@@ -82,6 +82,8 @@ class Ladder(JsonSerializable):
     guild: discord.Guild = field()
     game: Videogame = field()
     players: list[Player] = field(compare=False, hash=False)
+    is_frozen: bool = field(default=False, compare=False, hash=False)  # If true, no new challenges can be made
+
 
     def __eq__(self, other):
         return self.guild.id == other.guild.id
@@ -124,7 +126,8 @@ class Ladder(JsonSerializable):
         return {
             "guild_id": self.guild.id,
             "game": self.game.value,
-            "players": [player.to_json() for player in self.players]
+            "players": [player.to_json() for player in self.players],
+            "is_frozen": self.is_frozen
         }
 
     @staticmethod
@@ -133,7 +136,8 @@ class Ladder(JsonSerializable):
         guild = await bot.fetch_guild(int(json_obj["guild_id"]))
         game = Videogame(json_obj["game"])
         players = [await Player.from_json(bot, player) for player in json_obj["players"]]
-        return Ladder(guild, game, players)
+        is_frozen = json_obj.get("is_frozen", False)
+        return Ladder(guild, game, players, is_frozen)
     
 @dataclass(order=True)
 class ResultPlayer(JsonSerializable):
