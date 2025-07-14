@@ -97,12 +97,33 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
     @app_commands.command()
+    @app_commands.checks.has_role("sbub")
+    async def add(self, interaction: discord.Interaction, user: discord.Member, position: app_commands.Range[int, 1]):
+        """Add a player to a ladder at a certain position. Admins only!"""
+        if not await self.verify_ladder_exists(interaction):
+            return
+        if not await self.verify_ladder_is_not_frozen(interaction):
+            return
+
+        player = Player(user, datetime.datetime.now())
+        if player in self.ladders[interaction.guild].players:
+            return await interaction.response.send_message("This player has already joined this server's ladder.", ephemeral=True)
+        self.ladders[interaction.guild].players.insert(position-1, player)
+        write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
+    
+        description = f"**{interaction.user.mention} has joined this server's ladder at number {position-1}!**\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
+        embed =  ColorEmbed(title="New Player!", description=description)
+        return await interaction.response.send_message(embed=embed)
+
+    @app_commands.command()
     @app_commands.checks.has_permissions(manage_guild=True)
-    async def remove(self, interaction: discord.Interaction, user: discord.User, ephemeral: bool = True):
+    async def remove(self, interaction: discord.Interaction, user: discord.Member):
         """Remove a player from this server's ladder. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
             return
-        
+        if not await self.verify_ladder_is_not_frozen(interaction):
+            return
+
         player = Player(user, None)
         if player not in self.ladders[interaction.guild].players:
             return await interaction.response.send_message(f"{user.mention} is not in this server's ladder.", ephemeral=True)
@@ -118,11 +139,11 @@ class LadderCog(commands.GroupCog, name="ladder"):
 
         description = f"**{user.mention} has been removed from this server's ladder!**\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
         embed = ColorEmbed(title="Player removed!", description=description)
-        return await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
+        return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
     async def activate(self, interaction: discord.Interaction):
-        """Set yourself back to active. You will be considered inactive if you do not send or play any challenges in the next two weeks."""
+        """Set yourself back to active. You will be considered inactive if you do not send or play any challenges in the next week."""
         if not await self.verify_ladder_exists(interaction):
             return
         if not await self.verify_ladder_is_not_frozen(interaction):
@@ -135,7 +156,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         player.last_active_date = datetime.datetime.now()
         self.ladders[interaction.guild].players[self.ladders[interaction.guild].players.index(player)] = player
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
-        await interaction.response.send_message(f"You are now active! You will become inactive again if you do not send or play any challenges in the next two weeks.", ephemeral=True)
+        await interaction.response.send_message(f"You are now active! You will become inactive again if you do not send or play any challenges in the next week.", ephemeral=True)
 
     @app_commands.command()
     async def rankings(self, interaction: discord.Interaction, ephemeral: bool = True):
