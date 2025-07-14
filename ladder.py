@@ -80,7 +80,8 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
-    @app_commands.checks.has_permissions(manage_guild=True)
+    #@app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.checks.has_role("sbub")
     async def freeze(self, interaction: discord.Interaction, frozen: bool, ephemeral: bool = True):
         """Freeze this server's ladder. No one can join, leave, or challenge while the ladder is frozen. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
