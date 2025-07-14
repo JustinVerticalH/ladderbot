@@ -113,7 +113,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         removing_challenges = {challenge for challenge in challenges if challenge.challenger_player.user == user or challenge.challenged_player.user == user}
         challenges -= removing_challenges
         self.bot.get_cog("challenge").challenges[interaction.guild] = challenges
-        write_json(interaction.guild, "challenges", value=[challenge.to_json() for challenge in challenges])
+        write_json(interaction.guild.id, "challenges", value=[challenge.to_json() for challenge in challenges])
 
         description = f"**{user.mention} has been removed from this server's ladder!**\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
         embed = ColorEmbed(title="Player removed!", description=description)
