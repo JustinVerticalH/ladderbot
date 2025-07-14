@@ -71,7 +71,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         self.bot.get_cog("challenge").challenges[interaction.guild] = challenges
         write_json(interaction.guild, "challenges", value=[challenge.to_json() for challenge in challenges])
     
-        description = f"**{interaction.user.mention} has left this server's ladder!**\n\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
+        description = f"**{interaction.user.mention} has left this server's ladder!**\nThere are now {len(self.ladders[interaction.guild].players)} players in this ladder."
         embed = ColorEmbed(title="Player left!", description=description)
         return await interaction.response.send_message(embed=embed)
 
