@@ -21,7 +21,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         print(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.checks.has_role("Ladder Manager")
     async def create(self, interaction: discord.Interaction, game: Videogame, are_you_sure: bool):
         """Create a new ladder for this server. THIS COMMAND WILL ERASE ANY EXISTING LADDER FOR THIS SERVER! Admins only!"""
         if not are_you_sure:
@@ -81,8 +81,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
-    #@app_commands.checks.has_permissions(manage_guild=True)
-    @app_commands.checks.has_role("sbub")
+    @app_commands.checks.has_role("Ladder Manager")
     async def freeze(self, interaction: discord.Interaction, freeze: bool, ephemeral: bool = True):
         """Freeze this server's ladder. No one can join, leave, or challenge while the ladder is frozen. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
@@ -97,7 +96,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
     @app_commands.command()
-    @app_commands.checks.has_role("sbub")
+    @app_commands.checks.has_role("Ladder Manager")
     async def add(self, interaction: discord.Interaction, user: discord.Member, position: app_commands.Range[int, 1]):
         """Add a player to a ladder at a certain position. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
@@ -116,7 +115,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         return await interaction.response.send_message(embed=embed)
 
     @app_commands.command()
-    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.checks.has_role("Ladder Manager")
     async def remove(self, interaction: discord.Interaction, user: discord.Member):
         """Remove a player from this server's ladder. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
