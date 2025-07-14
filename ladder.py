@@ -42,7 +42,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         """Join this server's ladder."""
         if not await self.verify_ladder_exists(interaction):
             return
-        if not self.verify_ladder_is_not_frozen(interaction):
+        if not await self.verify_ladder_is_not_frozen(interaction):
             return
 
         player = Player(interaction.user, datetime.datetime.now())
@@ -60,7 +60,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         """Leave this server's ladder."""
         if not await self.verify_ladder_exists(interaction):
             return
-        if not self.verify_ladder_is_not_frozen(interaction):
+        if not await self.verify_ladder_is_not_frozen(interaction):
             return
 
         player = Player(interaction.user, None)
@@ -82,14 +82,14 @@ class LadderCog(commands.GroupCog, name="ladder"):
     @app_commands.command()
     #@app_commands.checks.has_permissions(manage_guild=True)
     @app_commands.checks.has_role("sbub")
-    async def freeze(self, interaction: discord.Interaction, frozen: bool, ephemeral: bool = True):
+    async def freeze(self, interaction: discord.Interaction, freeze: bool, ephemeral: bool = True):
         """Freeze this server's ladder. No one can join, leave, or challenge while the ladder is frozen. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
             return
         
-        self.ladders[interaction.guild].is_frozen = frozen
+        self.ladders[interaction.guild].is_frozen = freeze
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
-        if frozen:
+        if freeze:
             embed = ColorEmbed(title="Ladder Frozen!", description="No one can join, leave, or challenge while the ladder is frozen.")
         else:
             embed = ColorEmbed(title="Ladder Unfrozen!", description="Players can now join, leave, or challenge.")
