@@ -197,26 +197,30 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
                                                                  {"\nThey have swapped positions back." if result.is_upset else ""}"))
 
     @app_commands.command()
-    async def inprogress(self, interaction: discord.Interaction, ephemeral: bool = True):
+    async def inprogress(self, interaction: discord.Interaction, only_mine: bool = True, ephemeral: bool = True):
         "List all your outstanding challenges in this server."
         if interaction.guild not in self.challenges:
             return await interaction.response.send_message("No challenges!", ephemeral=True)
         if not await self.verify_user_in_ladder(interaction):
             return
 
-        challenger_challenges = [f"{challenge.challenged_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild] if challenge.challenger_player.user == interaction.user]
-        challenged_challenges = [f"{challenge.challenger_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild] if challenge.challenged_player.user == interaction.user]
         embed = ColorEmbed(title="Challenges")
-        embed.add_field(name="Challenging:", value='\n'.join(challenger_challenges))
-        embed.add_field(name="Challenged by:", value='\n'.join(challenged_challenges))
+        if only_mine:
+            challenges = [f"{challenge.challenger_player.user.mention}-{challenge.challenged_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild]]
+            embed.description = '\n'.join(challenges)
+        else:
+            challenger_challenges = [f"{challenge.challenged_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild] if challenge.challenger_player.user == interaction.user]
+            challenged_challenges = [f"{challenge.challenger_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild] if challenge.challenged_player.user == interaction.user]
+            embed.add_field(name="Challenging:", value='\n'.join(challenger_challenges))
+            embed.add_field(name="Challenged by:", value='\n'.join(challenged_challenges))
         await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
         
     @app_commands.command()
-    async def history(self, interaction: discord.Interaction, ephemeral: bool = True):
+    async def history(self, interaction: discord.Interaction, only_mine: bool = True, ephemeral: bool = True):
         """View your past challenges."""
         if not await self.verify_user_in_ladder(interaction):
             return
-        results = [result for result in self.results[interaction.guild] if result.winner.user == interaction.user or result.loser.user == interaction.user]
+        results = [result for result in self.results[interaction.guild] if (result.winner.user == interaction.user or result.loser.user == interaction.user or not only_mine)]
         results.sort(key=lambda result: result.completed_at, reverse=True)
         result_to_str = lambda result: \
             f"{result.winner.user.mention} {"("+','.join(result.winner.characters)+")" if len(result.winner.characters) > 0 else ""} \
