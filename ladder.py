@@ -21,7 +21,6 @@ class LadderCog(commands.GroupCog, name="ladder"):
         print(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
-    @app_commands.checks.has_role("Ladder Manager")
     async def create(self, interaction: discord.Interaction, game: Videogame, are_you_sure: bool):
         """Create a new ladder for this server. THIS COMMAND WILL ERASE ANY EXISTING LADDER FOR THIS SERVER! Admins only!"""
         if not are_you_sure:
