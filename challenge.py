@@ -135,6 +135,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
         synced = await self.bot.tree.sync()
         print(f"Synced {len(synced)} commands.")
+        print(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
     async def someone(self, interaction: discord.Interaction, user: discord.Member = None):

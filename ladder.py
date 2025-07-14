@@ -18,6 +18,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
     @commands.Cog.listener()
     async def on_ready(self):
         await initialize_from_json(self.bot, Ladder, self.ladders, "ladder", is_list=False)
+        print(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -121,7 +122,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
 
     @app_commands.command()
     async def activate(self, interaction: discord.Interaction):
-        """Set yourself back to active. You will be considered inactive if you do not send or play any challenges in the next week."""
+        """Set yourself back to active. You will be considered inactive if you do not send or play any challenges in the next two weeks."""
         if not await self.verify_ladder_exists(interaction):
             return
         if not await self.verify_ladder_is_not_frozen(interaction):
@@ -134,7 +135,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         player.last_active_date = datetime.datetime.now()
         self.ladders[interaction.guild].players[self.ladders[interaction.guild].players.index(player)] = player
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
-        await interaction.response.send_message(f"You are now active! You will become inactive again if you do not send or play any challenges in the next week.", ephemeral=True)
+        await interaction.response.send_message(f"You are now active! You will become inactive again if you do not send or play any challenges in the next two weeks.", ephemeral=True)
 
     @app_commands.command()
     async def rankings(self, interaction: discord.Interaction, ephemeral: bool = True):
@@ -152,10 +153,6 @@ class LadderCog(commands.GroupCog, name="ladder"):
 
     async def verify_ladder_exists(self, interaction: discord.Interaction) -> bool:
         """Checks if a ladder exists for this interaction's guild, and if not, sends a warning message."""
-        print(f"Ladder count: {len(self.ladders)}", flush=True)
-        print(f"Guilds: {self.ladders.keys()}", flush=True)
-        print(f"Guild: {interaction.guild}", flush=True)
-        print(f"Ladders: {self.ladders.values()}", flush=True)
         if self.ladders[interaction.guild] is None:
             await interaction.response.send_message("This server does not have a ladder yet. Use the `/ladder create` command!", ephemeral=True)
             return False
