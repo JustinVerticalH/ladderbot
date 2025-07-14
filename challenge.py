@@ -206,13 +206,13 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
         embed = ColorEmbed(title="Challenges")
         if only_mine:
-            challenges = [f"{challenge.challenger_player.user.mention}-{challenge.challenged_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild]]
-            embed.description = '\n'.join(challenges)
-        else:
             challenger_challenges = [f"{challenge.challenged_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild] if challenge.challenger_player.user == interaction.user]
             challenged_challenges = [f"{challenge.challenger_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild] if challenge.challenged_player.user == interaction.user]
             embed.add_field(name="Challenging:", value='\n'.join(challenger_challenges))
             embed.add_field(name="Challenged by:", value='\n'.join(challenged_challenges))
+        else:
+            challenges = [f"{challenge.challenger_player.user.mention}-{challenge.challenged_player.user.mention} - {format_dt(challenge.issued_at, style='R')}" for challenge in self.challenges[interaction.guild]]
+            embed.description = '\n'.join(challenges)
         await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
         
     @app_commands.command()
