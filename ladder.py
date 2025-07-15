@@ -21,6 +21,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
         print(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
+    @app_commands.checks.has_role("Ladder Manager")
     async def create(self, interaction: discord.Interaction, game: Videogame, are_you_sure: bool):
         """Create a new ladder for this server. THIS COMMAND WILL ERASE ANY EXISTING LADDER FOR THIS SERVER! Admins only!"""
         if not are_you_sure:
@@ -97,7 +98,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
     @app_commands.command()
     @app_commands.checks.has_role("Ladder Manager")
     async def add(self, interaction: discord.Interaction, user: discord.Member, position: app_commands.Range[int, 1]):
-        """Add a player to a ladder at a certain position. Admins only!"""
+        """Add a player to a ladder at a certain position. Move them to a new position if they are already in the ladder. Admins only!"""
         if not await self.verify_ladder_exists(interaction):
             return
         if not await self.verify_ladder_is_not_frozen(interaction):
@@ -105,7 +106,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
 
         player = Player(user, datetime.datetime.now())
         if player in self.ladders[interaction.guild].players:
-            return await interaction.response.send_message("This player has already joined this server's ladder.", ephemeral=True)
+            self.ladders[interaction.guild].players.remove(player)
         self.ladders[interaction.guild].players.insert(position-1, player)
         write_json(interaction.guild.id, "ladder", value=self.ladders[interaction.guild].to_json())
     
