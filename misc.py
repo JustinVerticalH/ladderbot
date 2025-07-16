@@ -1,4 +1,5 @@
 import discord
+import logging
 from discord import app_commands
 from discord.ext import commands
 from ioutils import ColorEmbed
@@ -10,6 +11,11 @@ class MiscCog(commands.Cog, name="misc"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         super().__init__()
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        synced = await self.bot.tree.sync()
+        logging.info(f"Synced {len(synced)} commands.")
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild):
@@ -25,6 +31,7 @@ class MiscCog(commands.Cog, name="misc"):
         Use the `/ladder create` command to set up a ladder for your server, and `/ladder join` to join.\n \
         Then you can use `/challenge someone` to challenge someone above you.\n \
         The two of you then play a best of 5 set. Once you finish, use `/challenge report` to report the result.\n \
+        Use `/faq` for more help.\n \
         Challenge lots of people and climb as high as you can!"
         embed = ColorEmbed(title="Help", description=description)
         await interaction.response.send_message(embed=embed, ephemeral=ephemeral)

@@ -1,7 +1,8 @@
 import asyncio
 import datetime
-import json
 import discord
+import json
+import logging
 
 from discord import app_commands
 from discord.ext import commands
@@ -135,9 +136,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         await initialize_from_json(self.bot, Challenge, self.challenges, "challenges", is_list=True)
         await initialize_from_json(self.bot, Result, self.results, "results", is_list=True)
 
-        synced = await self.bot.tree.sync()
-        print(f"Synced {len(synced)} commands.")
-        print(f"Cog \"{self.__cog_name__}\" is now ready!")
+        logging.info(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
     async def someone(self, interaction: discord.Interaction, user: discord.Member = None):

@@ -1,5 +1,6 @@
 import datetime
 import discord
+import logging
 
 from discord import app_commands
 from discord.ext import commands
@@ -20,7 +21,7 @@ class LadderCog(commands.GroupCog, name="ladder"):
     @commands.Cog.listener()
     async def on_ready(self):
         await initialize_from_json(self.bot, Ladder, self.ladders, "ladder", is_list=False)
-        print(f"Cog \"{self.__cog_name__}\" is now ready!")
+        logging.info(f"Cog \"{self.__cog_name__}\" is now ready!")
 
     @app_commands.command()
     @app_commands.checks.has_role(ADMIN_ROLE_NAME)
