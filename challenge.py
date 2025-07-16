@@ -299,7 +299,11 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
             challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(winner, loser)), None)
             result = None
         if result is None and challenge is None:
-            return await interaction.response.send_message(f"Could not find a {"completed" if is_edit else ""} challenge for those players!", ephemeral=True)
+            return await interaction.response.send_message(f"Could not find a {"completed " if is_edit else ""}challenge for those players!", ephemeral=True)
+
+        admin_role = discord.utils.find(lambda role: role.name == ADMIN_ROLE_NAME, interaction.guild.roles)
+        if interaction.user != winner and interaction.user != loser and admin_role not in interaction.user.roles:
+            return await interaction.response("You do not have permission to report this set!", ephemeral=True)
 
         users_to_confirm = {user for user in [winner, loser] if user != interaction.user}
         confirmation_time = datetime.datetime.now() + datetime.timedelta(hours=HOURS_UNTIL_AUTO_VERIFY)
