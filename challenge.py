@@ -199,7 +199,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
             write_json(interaction.guild.id, "ladder", value=ladder.to_json())
         self.results[interaction.guild].discard(result)
         write_json(interaction.guild.id, "results", value=[result.to_json() for result in self.challenges[interaction.guild]])
-        await interaction.response.send_message(embed=ColorEmbed(title="Challenge!", description=f"Undid the results of {interaction.user.mention} vs. {versus.mention}. \
+        await interaction.response.send_message(embed=ColorEmbed(title="Challenge!", description=f"Undid the results of {winner.mention} vs. {loser.mention}. \
                                                                  {"\nThey have swapped positions back." if result.is_upset else ""}"))
 
     @app_commands.command()
