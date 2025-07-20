@@ -146,7 +146,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     @app_commands.command()
     async def cancel(self, interaction: discord.Interaction, versus: discord.Member):
         """Cancel a challenge you have sent to another user."""
-        if not await self.verify_user_in_ladder(interaction, versus):
+        if not await self.verify_user_in_ladder(interaction, interaction.user) or await self.verify_user_in_ladder(interaction, versus):
             return
         if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
             return
@@ -184,6 +184,10 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         result = next((result for result in self.results[interaction.guild] if result.is_match(winner, loser)), None)
         if result is None:
             return await interaction.response.send_message("Could not find a completed challenge for those players!", ephemeral=True)
+
+        admin_role = discord.utils.find(lambda role: role.name == ADMIN_ROLE_NAME, interaction.guild.roles)
+        if result.winner.user != winner or result.loser.user != loser or admin_role not in interaction.user.roles:
+            return await interaction.response.send_message("You do not have permission to undo this result!", ephemeral=True)
 
         if result.is_upset:
             # Swap the players' positions back
@@ -238,14 +242,14 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
     async def send_challenge(self, interaction: discord.Interaction, user: discord.Member):
         """Sends a challenge to another user in the ladder."""
-        if not await self.verify_user_in_ladder(interaction, user):
+        if not await self.verify_user_in_ladder(interaction, interaction.user):
             return
         if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
             return
         if interaction.guild not in self.challenges:
             self.challenges[interaction.guild] = set() # Initialize the set of challenges for this guild if necessary
 
-        recent_result = next((result for result in self.results[interaction.guild] if result.is_match(interaction.user, user) and result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now()), None)
+        recent_result = next((result for result in self.results[interaction.guild] if (result.is_match(interaction.user, user)) and (result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now())), None)
         if recent_result is not None:
             return await interaction.response.send_message(f"You have already played {user.mention} recently! You can play them again {format_dt(recent_result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN, style='R')}.", ephemeral=True)
         
@@ -275,9 +279,9 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         existing_challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(challenger_player.user, challenged_player.user)), None)
         if existing_challenge is not None:
             return await interaction.response.send_message(f"You have already challenged this user {format_dt(existing_challenge.issued_at, style='R')}!", ephemeral=True)
-        recent_results = [result for result in self.results[interaction.guild] if (result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN) > datetime.datetime.now()]
-        if len(recent_results) > 0:
-            return await interaction.response.send_message(f"You have already played this user recently. You can challenge this user again {format_dt(recent_results[0].completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN, style='R')}!", ephemeral=True)
+        recent_result = next((result for result in self.results[interaction.guild] if (result.is_match(challenger_player.user, challenged_player.user)) and (result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now())), None)
+        if recent_result is not None:
+            return await interaction.response.send_message(f"You have already played {challenged_player.user.mention} recently! You can play them again {format_dt(recent_result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN, style='R')}.", ephemeral=True)
         
         challenge = Challenge(challenger_player, challenged_player, datetime.datetime.now())
         self.challenges[interaction.guild].add(challenge)
