@@ -146,7 +146,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     @app_commands.command()
     async def cancel(self, interaction: discord.Interaction, versus: discord.Member):
         """Cancel a challenge you have sent to another user."""
-        if not await self.verify_user_in_ladder(interaction):
+        if not await self.verify_user_in_ladder(interaction, versus):
             return
         if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
             return
@@ -174,7 +174,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     @app_commands.command()
     async def undo(self, interaction: discord.Interaction, winner: discord.Member, loser: discord.Member):
         """Undo results that have already been reported and confirmed."""
-        if not await self.verify_user_in_ladder(interaction):
+        if not await self.verify_user_in_ladder(interaction, winner) and not await self.verify_user_in_ladder(interaction, loser):
             return
         if not await self.verify_ladder_is_not_frozen(interaction):
             return
@@ -207,7 +207,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         "List all your outstanding challenges in this server."
         if interaction.guild not in self.challenges:
             return await interaction.response.send_message("No challenges!", ephemeral=True)
-        if not await self.verify_user_in_ladder(interaction):
+        if not await self.verify_user_in_ladder(interaction, interaction.user):
             return
 
         embed = ColorEmbed(title="Challenges")
@@ -224,7 +224,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
     @app_commands.command()
     async def history(self, interaction: discord.Interaction, only_mine: bool = True, ephemeral: bool = True):
         """View your past challenges."""
-        if not await self.verify_user_in_ladder(interaction):
+        if not await self.verify_user_in_ladder(interaction, interaction.user):
             return
         results = [result for result in self.results[interaction.guild] if (result.winner.user == interaction.user or result.loser.user == interaction.user or not only_mine)]
         results.sort(key=lambda result: result.completed_at, reverse=True)
@@ -238,7 +238,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
     async def send_challenge(self, interaction: discord.Interaction, user: discord.Member):
         """Sends a challenge to another user in the ladder."""
-        if not await self.verify_user_in_ladder(interaction):
+        if not await self.verify_user_in_ladder(interaction, user):
             return
         if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
             return
@@ -294,12 +294,23 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
 
         if is_edit:
             result = next((result for result in self.results[interaction.guild] if result.is_match(winner, loser)), None)
+            if result is None:
+                return await interaction.response.send_message(f"Could not find a completed challenge for those players!", ephemeral=True)
             challenge = None
         else:
+            recent_result = next((result for result in self.results[interaction.guild] if result.is_match(winner, loser) and result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN > datetime.datetime.now()), None)
+            if recent_result is not None:
+                return await interaction.response.send_message(f"{winner.mention} and {loser.mention} have already played recently! You can play them again {format_dt(recent_result.completed_at + TIME_UNTIL_CHALLENGEABLE_AGAIN, style='R')}.", ephemeral=True)
             challenge = next((challenge for challenge in self.challenges[interaction.guild] if challenge.is_match(winner, loser)), None)
+            if challenge is None: # Reporting a challenge that has not been sent
+                # We need to verify that this is a valid challenge
+                if not await self.verify_user_in_ladder(interaction, winner) and await self.verify_user_in_ladder(interaction, loser):
+                    return
+                winner_player = next((player for player in self.bot.get_cog("ladder").ladders[interaction.guild].players if player.user == winner), None)
+                loser_player = next((player for player in self.bot.get_cog("ladder").ladders[interaction.guild].players if player.user == loser), None)
+                if not (winner_player in self.bot.get_cog("ladder").ladders[interaction.guild].challengeable_players(loser_player) or loser_player in self.bot.get_cog("ladder").ladders[interaction.guild].challengeable_players(winner_player)):
+                    return await interaction.response.send_message("These players are not close enough on the ladder to play each other!", ephemeral=True)
             result = None
-        if result is None and challenge is None:
-            return await interaction.response.send_message(f"Could not find a {"completed " if is_edit else ""}challenge for those players!", ephemeral=True)
 
         admin_role = discord.utils.find(lambda role: role.name == ADMIN_ROLE_NAME, interaction.guild.roles)
         if interaction.user != winner and interaction.user != loser and admin_role not in interaction.user.roles:
@@ -341,7 +352,7 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         """Update a challenge's status and edit the confirmation message."""
         if not await self.bot.get_cog("ladder").verify_ladder_is_not_frozen(interaction):
             return
-        if not is_edit and challenge not in self.challenges[interaction.guild]:
+        if not is_edit and challenge is not None and challenge not in self.challenges[interaction.guild]:
             embed = ColorEmbed(title="Winner!", description="This challenge has already been reported!")
             return await message.edit(embed=embed, view=None)
 
@@ -386,13 +397,13 @@ class ChallengeCog(commands.GroupCog, name="challenge"):
         self.results[interaction.guild].add(result)
         write_json(interaction.guild.id, "results", value=[result.to_json() for result in self.results[interaction.guild]])
 
-    async def verify_user_in_ladder(self, interaction: discord.Interaction) -> bool:
+    async def verify_user_in_ladder(self, interaction: discord.Interaction, user: discord.Member) -> bool:
         """Checks if a user has joined this guild's ladder, and if not, sends a warning message."""
         laddercog = self.bot.get_cog("ladder")
         if not await laddercog.verify_ladder_exists(interaction):
             return False
         ladder = laddercog.ladders[interaction.guild]
-        challenger_player = next((player for player in ladder.players if player.user == interaction.user), None)
+        challenger_player = next((player for player in ladder.players if player.user == user), None)
         if challenger_player is None:
             await interaction.response.send_message("You have not joined this server's ladder yet. Use the `/ladder join` command!", ephemeral=True)
             return False
